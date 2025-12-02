@@ -1,5 +1,5 @@
 # Use a lightweight Python base
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 # Prevent python from writing pyc files or buffering stdout
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -26,4 +26,4 @@ RUN useradd -m appuser
 USER appuser
 
 # Run the bot
-CMD ["python", "bot.py"]
+CMD ["pipenv", "run", "python", "bot.py"]
