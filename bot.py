@@ -57,6 +57,18 @@ def db_get_user_name(user_id):
     conn.close()
     return row[0] if row else None
 
+def db_set_user_name(user_id, name):
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute("INSERT OR REPLACE INTO user_prefs VALUES (?, ?)", (user_id, name))
+    conn.commit()
+    conn.close()
+
+def db_delete_user_name(user_id):
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute("DELETE FROM user_prefs WHERE user_id=?", (user_id,))
+    conn.commit()
+    conn.close()
+
 # --- BOT SETUP ---
 TARGET_CATEGORY_NAME = "🔊 VOICE LOBBY"
 TRIGGER_CHANNEL_NAME = "➕ Create Channel"
@@ -71,7 +83,7 @@ intents.members = True
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Memory for IDs
+# Memory
 server_configs = {}
 channel_tasks = {}
 
@@ -81,7 +93,6 @@ class RoleSelect(Select):
         self.target_channel = channel
         roles = channel.guild.roles
 
-        # Filter: Not @everyone, Not Managed (Bot roles), Lower than Bot
         valid_roles = [
             r for r in roles
             if r.name != "@everyone"
@@ -110,7 +121,6 @@ class RoleSelect(Select):
         if not role:
             return await interaction.response.send_message("Role not found!", ephemeral=True)
 
-        # Logic: Set permissions specifically on THIS channel
         await self.target_channel.set_permissions(interaction.guild.default_role, connect=False)
         await self.target_channel.set_permissions(role, connect=True)
 
@@ -129,14 +139,14 @@ class VoiceControlView(View):
 
     @discord.ui.button(label="🔒 Lock", style=discord.ButtonStyle.danger, custom_id="lock_vc")
     async def lock_button(self, interaction: discord.Interaction, button: Button):
-        # Hard Lock: Set user limit to current members
         await self.voice_channel.edit(user_limit=len(self.voice_channel.members))
         await interaction.response.send_message("🔒 **Locked!** (User limit applied)", ephemeral=True)
 
     @discord.ui.button(label="🔓 Unlock", style=discord.ButtonStyle.success, custom_id="unlock_vc")
     async def unlock_button(self, interaction: discord.Interaction, button: Button):
         await self.voice_channel.edit(user_limit=0)
-        await self.voice_channel.set_permissions(interaction.guild.default_role, connect=None) # Reset to inherit
+        # We also reset specific overwrites to ensure inheritance restores (optional)
+        await self.voice_channel.set_permissions(interaction.guild.default_role, connect=None)
         await interaction.response.send_message("🔓 **Unlocked!**", ephemeral=True)
 
     @discord.ui.button(label="👥 Role Limit", style=discord.ButtonStyle.primary, custom_id="role_limit_vc")
@@ -148,6 +158,59 @@ class VoiceControlView(View):
     @discord.ui.button(label="✏️ Rename", style=discord.ButtonStyle.secondary, custom_id="rename_vc")
     async def rename_button(self, interaction: discord.Interaction, button: Button):
         await interaction.response.send_message("ℹ️ Right Click channel > Edit Channel!", ephemeral=True)
+
+# --- NEW: ADMIN COMMANDS ---
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def create_lobby(ctx, category_name: str, role: discord.Role = None):
+    """
+    Creates a new Voice Lobby.
+    Usage: !create_lobby "VIP Lounge" @VIP
+    If a role is provided, the lobby is private to that role.
+    """
+    guild = ctx.guild
+
+    # 1. Define Permissions
+    overwrites = {}
+    if role:
+        # Private Lobby Logic: Deny everyone, Allow Role
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False, connect=False),
+            role: discord.PermissionOverwrite(view_channel=True, connect=True)
+        }
+        msg = f"✅ Created Private Lobby **{category_name}** restricted to {role.mention}!"
+    else:
+        # Public Lobby Logic
+        msg = f"✅ Created Public Lobby **{category_name}**!"
+
+    # 2. Create Category
+    category = await guild.create_category(category_name, overwrites=overwrites)
+
+    # 3. Create Trigger Channel
+    await guild.create_voice_channel(TRIGGER_CHANNEL_NAME, category=category)
+
+    await ctx.send(msg)
+
+# --- USER PREFERENCE COMMANDS ---
+
+@bot.command()
+async def setname(ctx, *, name: str):
+    """
+    Sets your permanent custom voice channel name.
+    Usage: !setname The Batcave
+    """
+    if len(name) > 30:
+        return await ctx.send("❌ Name is too long! (Max 30 chars)")
+
+    db_set_user_name(ctx.author.id, name)
+    await ctx.send(f"✅ Your channel name is now set to: **🔊 {name}**\n(It will appear next time you create a channel)")
+
+@bot.command()
+async def resetname(ctx):
+    """Resets your voice channel name to default (User's VC)."""
+    db_delete_user_name(ctx.author.id)
+    await ctx.send("✅ Custom name removed. Back to default!")
 
 # --- CHAOS COMMANDS ---
 @bot.command()
@@ -221,67 +284,49 @@ async def handle_loneliness(channel, member_count):
 
 async def ensure_voice_setup(guild):
     """
-    Ensures the 'VOICE LOBBY' category and 'Create Channel' trigger exist.
+    Ensures the Default 'VOICE LOBBY' exists.
+    (This is just the default public one).
     """
-    # 1. Category
     category = discord.utils.get(guild.categories, name=TARGET_CATEGORY_NAME)
     if not category:
         category = await guild.create_category(TARGET_CATEGORY_NAME)
-        print(f"🛠️  Created Category '{TARGET_CATEGORY_NAME}'")
+        print(f"🛠️  Created Default Category '{TARGET_CATEGORY_NAME}'")
 
-    # 2. Trigger
     trigger = discord.utils.get(category.voice_channels, name=TRIGGER_CHANNEL_NAME)
     if not trigger:
         trigger = await guild.create_voice_channel(TRIGGER_CHANNEL_NAME, category=category)
-        print(f"🛠️  Created Trigger '{TRIGGER_CHANNEL_NAME}'")
 
-    # 3. AFK
     afk_c = discord.utils.get(guild.voice_channels, name=AFK_CHANNEL_NAME)
     if not afk_c:
         afk_c = await guild.create_voice_channel(AFK_CHANNEL_NAME, category=category)
         try: await guild.edit(afk_channel=afk_c, afk_timeout=300)
         except: pass
 
-    # Store IDs
-    server_configs[guild.id] = {
-        'category_id': category.id,
-        'trigger_id': trigger.id
-    }
-    return server_configs[guild.id]
-
 @bot.event
 async def on_ready():
     init_db()
     print(f'Logged in as {bot.user}')
-
-    # Re-run setup for every server to get correct IDs
     for guild in bot.guilds:
         await ensure_voice_setup(guild)
-
     print('--- TRG Manager Ready ---')
 
 @bot.event
 async def on_voice_state_update(member, before, after):
     guild = member.guild
 
-    # Ensure config exists
-    if guild.id not in server_configs:
-        await ensure_voice_setup(guild)
+    # --- 1. JOIN ANY TRIGGER CHANNEL ---
+    # We now detect by NAME, so it works in ANY category (Public, VIP, etc.)
+    if after.channel and after.channel.name == TRIGGER_CHANNEL_NAME:
 
-    config = server_configs[guild.id]
-    trigger_id = config['trigger_id']
-    category_id = config['category_id']
-
-    # 1. JOIN TRIGGER
-    if after.channel and after.channel.id == trigger_id:
-
-        category = guild.get_channel(category_id)
+        category = after.channel.category
         custom_name = db_get_user_name(member.id)
         channel_name = f"🔊 {custom_name}" if custom_name else f"🔊 {member.display_name}'s VC"
 
         # INHERITANCE:
-        # We give the owner specific powers.
-        # We DO NOT set @everyone, so it inherits the Category's Public visibility.
+        # We add the Creator, but we do NOT add @everyone overwrites.
+        # This means the channel acts like a chameleon:
+        # - If created in "VIP Lounge" (Private), new channel is Private.
+        # - If created in "Voice Lobby" (Public), new channel is Public.
         overwrites = {
             member: discord.PermissionOverwrite(connect=True, manage_channels=True, move_members=True)
         }
@@ -295,19 +340,19 @@ async def on_voice_state_update(member, before, after):
         view = VoiceControlView(new_channel)
         await new_channel.send(f"Welcome, {member.mention}!", view=view)
 
-    # 2. CLEANUP
+    # --- 2. CLEANUP ---
     if before.channel:
-        # Check if it was in our Target Category (and not the trigger/afk)
-        if before.channel.category_id == category_id:
-            if before.channel.id != trigger_id and before.channel.name != AFK_CHANNEL_NAME:
-                if len(before.channel.members) == 0:
-                    if before.channel.id in channel_tasks:
-                        channel_tasks[before.channel.id].cancel()
-                        del channel_tasks[before.channel.id]
+        # We rely on the DB to tell us if this channel was created by the bot
+        if db_is_temp_channel(before.channel.id):
+            if len(before.channel.members) == 0:
+                # Cleanup Tasks
+                if before.channel.id in channel_tasks:
+                    channel_tasks[before.channel.id].cancel()
+                    del channel_tasks[before.channel.id]
 
-                    db_delete_channel(before.channel.id)
-                    await before.channel.delete()
-                else:
-                    await handle_loneliness(before.channel, len(before.channel.members))
+                db_delete_channel(before.channel.id)
+                await before.channel.delete()
+            else:
+                await handle_loneliness(before.channel, len(before.channel.members))
 
 bot.run(TOKEN)
