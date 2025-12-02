@@ -1,0 +1,15 @@
+services:
+  trg-bot:
+    image: ghcr.io/ahmed93/trg-vmb:latest
+    container_name: trg_bot
+    restart: always
+    environment:
+      - DB_PATH=/data/trg.db
+      - DISCORD_TOKEN=your_token_here
+
+    # Persist the database
+    volumes:
+      - bot_data:/data
+
+volumes:
+  bot_data:
