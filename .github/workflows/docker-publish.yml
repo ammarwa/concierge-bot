@@ -3,28 +3,39 @@ name: Build and Publish Docker Image
 on:
   push:
     branches: [ "main" ]
-    tags: [ 'v*.*.*' ]
+    # We remove the 'tags' trigger to avoid double-builds.
+    # This workflow now CREATES the tag for you.
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build:
+  build-and-push:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      packages: write
+      contents: write # ⚠️ NEEDED: To push the new tag back to the repo
+      packages: write # NEEDED: To upload the docker image
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # ⚠️ NEEDED: Must fetch full history to calculate version
 
-      # 1. Add QEMU (Allows building for ARM on Intel runners)
+      # --- AUTO VERSIONING STEP ---
+      - name: Bump version and push tag
+        id: tag_version
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: patch # If no "feat" or "fix" in commit, just bump 0.0.1
+          tag_prefix: v     # Creates tags like v1.0.1
+
+      # --- BUILD STEPS ---
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
-      # 2. Add Docker Buildx (The tool that handles multi-platform builds)
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -35,24 +46,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
-
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          # 3. Specify both platforms here
           platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          # Optimization: Cache layers to speed up future builds
+          # Use the output from the tagging step to tag the image
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag_version.outputs.new_tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
