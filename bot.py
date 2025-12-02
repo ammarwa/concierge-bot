@@ -11,7 +11,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 TOKEN = os.getenv('DISCORD_TOKEN')
 
 # --- DATABASE SETUP ---
-DB_NAME = "trg.db"
+DB_NAME = os.getenv('DB_PATH', 'trg.db')
 
 def init_db():
     """Initializes the SQLite database with necessary tables."""
