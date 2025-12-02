@@ -6,8 +6,6 @@ services:
     environment:
       - DB_PATH=/data/trg.db
       - DISCORD_TOKEN=your_token_here
-
-    # Persist the database
     volumes:
       - bot_data:/data
 
