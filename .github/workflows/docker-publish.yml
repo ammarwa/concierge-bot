@@ -3,6 +3,10 @@ name: Build and Publish Docker Image
 on:
   push:
     branches: [ "main" ]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.gitignore'
     # We remove the 'tags' trigger to avoid double-builds.
     # This workflow now CREATES the tag for you.
 
