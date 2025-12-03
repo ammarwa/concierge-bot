@@ -122,7 +122,7 @@ async def on_command_error(ctx, error):
     await log_error(error, ctx)
     print(f"Command Error: {error}")
 
-# --- UI CLASSES (RoleSelect, View) ---
+# --- UI CLASSES ---
 class RoleSelect(Select):
     def __init__(self, channel, bot_member):
         self.target_channel = channel
@@ -201,7 +201,7 @@ async def create_lobby(ctx, category_name: str, role: discord.Role = None):
         await ctx.send("❌ Failed to create lobby.")
         await log_error(e, ctx)
 
-# --- USER PREFERENCE COMMANDS (UPDATED) ---
+# --- USER PREFERENCE COMMANDS (FIXED) ---
 
 @bot.command()
 async def setname(ctx, *, user_input: str):
@@ -213,28 +213,32 @@ async def setname(ctx, *, user_input: str):
     target = ctx.author
     name_to_set = user_input
 
-    # Admin Override Check: Did they mention someone?
-    if ctx.message.mentions and ctx.author.guild_permissions.administrator:
-        target = ctx.message.mentions[0]
-        # Remove the mention from the string to get the name
-        # Regex to remove <@123> or <@!123>
-        name_to_set = re.sub(r'<@!?\d+>', '', user_input).strip()
+    # 1. Admin Override Check (Mention Detection)
+    if ctx.message.mentions:
+        if ctx.author.guild_permissions.administrator:
+            target = ctx.message.mentions[0]
+            # Remove the mention from the string to get the actual name
+            name_to_set = re.sub(r'<@!?\d+>', '', user_input).strip()
+        else:
+            return await ctx.send("❌ Only Admins can set names for other users.")
 
+    # 2. Quote Cleanup: "Name" -> Name
+    if name_to_set.startswith('"') and name_to_set.endswith('"'):
+        name_to_set = name_to_set[1:-1].strip()
+
+    # 3. Validation
     if len(name_to_set) > 30:
-        return await ctx.send("❌ Name is too long! (Max 30 chars)")
+        return await ctx.send(f"❌ Name is too long! ({len(name_to_set)}/30 chars)")
     if len(name_to_set) == 0:
         return await ctx.send("❌ Please provide a name!")
 
+    # 4. Save
     db_set_user_name(target.id, ctx.guild.id, name_to_set)
     await ctx.send(f"✅ Set **{target.display_name}'s** channel name to: **🔊 {name_to_set}**")
 
 @bot.command()
 async def resetname(ctx, member: discord.Member = None):
-    """
-    Resets custom VC name.
-    Usage: !resetname (Resets yours)
-    Admin Usage: !resetname @User (Resets theirs)
-    """
+    """Resets custom VC name."""
     target = ctx.author
     if member and ctx.author.guild_permissions.administrator:
         target = member
@@ -243,7 +247,6 @@ async def resetname(ctx, member: discord.Member = None):
     await ctx.send(f"✅ Reset custom name for **{target.display_name}**.")
 
 # --- CHAOS COMMANDS ---
-# (Stealth logic included from previous steps)
 @bot.command()
 async def roulette(ctx):
     if not ctx.author.voice: return await ctx.send("❌ Join voice first!")
