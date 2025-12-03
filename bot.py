@@ -186,9 +186,14 @@ async def create_lobby(ctx, category_name: str, role: discord.Role = None):
     guild = ctx.guild
     overwrites = {}
     if role:
+        # Private Lobby Logic:
+        # 1. Deny everyone
+        # 2. Allow the Target Role
+        # 3. CRITICAL: Allow the BOT itself (guild.me)
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False, connect=False),
-            role: discord.PermissionOverwrite(view_channel=True, connect=True)
+            role: discord.PermissionOverwrite(view_channel=True, connect=True),
+            guild.me: discord.PermissionOverwrite(view_channel=True, connect=True, manage_channels=True, move_members=True)
         }
         msg = f"✅ Created Private Lobby **{category_name}** restricted to {role.mention}!"
     else:
