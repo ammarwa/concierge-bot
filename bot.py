@@ -165,6 +165,7 @@ class VoiceControlView(View):
     @discord.ui.button(label="🔓 Unlock", style=discord.ButtonStyle.success, custom_id="unlock_vc")
     async def unlock_button(self, interaction: discord.Interaction, button: Button):
         await self.voice_channel.edit(user_limit=0)
+        # We also reset specific overwrites to ensure inheritance restores (optional)
         await self.voice_channel.set_permissions(interaction.guild.default_role, connect=None)
         await interaction.response.send_message("🔓 **Unlocked!**", ephemeral=True)
 
@@ -400,8 +401,6 @@ async def ensure_voice_setup(guild):
         if not trigger:
             trigger = await guild.create_voice_channel(TRIGGER_CHANNEL_NAME, category=category)
 
-        # AFK creation removed from here!
-
     except Exception as e:
         print(f"Failed setup {guild.name}: {e}")
         await log_error(e, extra_info=f"Setup {guild.name}")
@@ -421,8 +420,14 @@ async def on_voice_state_update(member, before, after):
             category = after.channel.category
             custom_name = db_get_user_name(member.id, guild.id)
             channel_name = f"🔊 {custom_name}" if custom_name else f"🔊 {member.display_name}'s VC"
-            overwrites = {member: discord.PermissionOverwrite(connect=True, manage_channels=True, move_members=True)}
-            new_channel = await guild.create_voice_channel(channel_name, category=category, overwrites=overwrites)
+
+            # FIXED: Do NOT pass overwrites during creation.
+            # This ensures it copies the Category permissions (inheritance).
+            new_channel = await guild.create_voice_channel(channel_name, category=category)
+
+            # THEN set the owner permissions
+            await new_channel.set_permissions(member, connect=True, manage_channels=True, move_members=True)
+
             await member.move_to(new_channel)
             db_save_channel(new_channel.id, guild.id, channel_name)
             await handle_loneliness(new_channel, 1)
