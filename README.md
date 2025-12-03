@@ -25,35 +25,57 @@ A feature-rich Discord bot for managing dynamic voice channels, creating private
 - **`!flip`**: Flip a coin (Heads/Tails).
 - **`!bonk @user`**: Send a user to AFK jail and back (requires them to be in VC).
 - **`!ride @user`**: Send a user on a rollercoaster ride through random channels.
+- **`!mimic @user`**: The bot mimics the user's nickname for 2 minutes.
+- **`!lag @user`**: Simulates lag by moving the user between channels rapidly.
+- **`!mute_roulette`**: Mutes a random user in your voice channel for 30 seconds.
 
 ### 👑 Admin Commands
 - **`!create_lobby "<Name>" [@Role]`**: Create a new category and trigger channel.
     - Example Public: `!create_lobby "Gaming Lounge"`
     - Example Private: `!create_lobby "Admin Area" @Admin`
 
+## Prerequisites
+
+- **Python 3.13+** (for local development)
+- **Pipenv** (for dependency management)
+- **Docker** (optional, for containerized deployment)
+- **Discord Bot Token**: Get one from the [Discord Developer Portal](https://discord.com/developers/applications).
+
 ## Docker Setup
 
 ### 1. Configure Environment
-Create a `.env` file:
+Create a `.env` file in the project root:
 ```bash
 DISCORD_TOKEN=your_token_here
 DB_PATH=/data/trg.db
+MOD_CHANNEL_ID=123456789012345678  # Optional: ID for error logging
 ```
 
-### 2. Run with Docker Compose
+### 2. Run with Docker Compose (Recommended)
 ```bash
 docker-compose up -d
 ```
-
 - **Logs**: `docker-compose logs -f`
 - **Restart**: `docker-compose restart`
+- **Stop**: `docker-compose down`
 
-## Configuration Reference
+### 3. Manual Docker Run
+If you prefer not to use Compose:
 
-| Variable | Description | Default |
-| :--- | :--- | :--- |
-| `DISCORD_TOKEN` | **Required**. Your Discord Bot Token. | - |
-| `DB_PATH` | Path to the SQLite DB inside the container. | `trg.db` |
+**Build the image:**
+```bash
+docker build -t trg-bot .
+```
+
+**Run the container:**
+```bash
+docker run -d \
+  --name trg_bot \
+  --restart always \
+  --env-file .env \
+  -v $(pwd)/trg.db:/data/trg.db \
+  trg-bot
+```
 
 ## Local Development
 
@@ -61,7 +83,28 @@ docker-compose up -d
     ```bash
     pipenv install
     ```
-2.  **Run the Bot**
+
+2.  **Activate Virtual Environment**
     ```bash
-    pipenv run python bot.py
+    pipenv shell
     ```
+
+3.  **Run the Bot**
+    ```bash
+    python bot.py
+    ```
+    *Or one-liner:* `pipenv run python bot.py`
+
+## Configuration Reference
+
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `DISCORD_TOKEN` | **Required**. Your Discord Bot Token. | - |
+| `DB_PATH` | Path to the SQLite DB. | `trg.db` |
+| `MOD_CHANNEL_ID`| Channel ID to log bot errors. | `None` |
+
+## Troubleshooting
+
+- **Bot not creating channels?** Ensure the bot has "Manage Channels" and "Move Members" permissions.
+- **Commands not working?** Check if the bot has "Message Content Intent" enabled in the Discord Developer Portal.
+- **Database errors?** Ensure the `DB_PATH` directory is writable.

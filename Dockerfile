@@ -26,4 +26,4 @@ RUN useradd -m appuser
 USER appuser
 
 # Run the bot
-CMD ["python", "bot.py"]
+CMD ["pipenv", "run", "python", "bot.py"]
