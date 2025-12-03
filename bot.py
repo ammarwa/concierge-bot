@@ -1,3 +1,4 @@
+# ... existing imports ...
 import discord
 import os
 import asyncio
@@ -179,7 +180,6 @@ class VoiceControlView(View):
 
 # --- ADMIN COMMANDS ---
 @bot.command()
-@commands.has_permissions(administrator=True)
 async def create_lobby(ctx, category_name: str, role: discord.Role = None):
     """Creates a new Voice Lobby."""
     guild = ctx.guild
@@ -201,26 +201,22 @@ async def create_lobby(ctx, category_name: str, role: discord.Role = None):
         await ctx.send("❌ Failed to create lobby.")
         await log_error(e, ctx)
 
-# --- USER PREFERENCE COMMANDS (FIXED) ---
-
+# --- USER PREFERENCE COMMANDS ---
 @bot.command()
 async def setname(ctx, *, user_input: str):
     """
     Sets a custom VC name.
     Usage: !setname My Cool Room
-    Admin Usage: !setname @User User's Room
+    Usage: !setname @User User's Room (Anyone can do this!)
     """
     target = ctx.author
     name_to_set = user_input
 
-    # 1. Admin Override Check (Mention Detection)
+    # 1. Mention Check (No Admin Required now)
     if ctx.message.mentions:
-        if ctx.author.guild_permissions.administrator:
-            target = ctx.message.mentions[0]
-            # Remove the mention from the string to get the actual name
-            name_to_set = re.sub(r'<@!?\d+>', '', user_input).strip()
-        else:
-            return await ctx.send("❌ Only Admins can set names for other users.")
+        target = ctx.message.mentions[0]
+        # Remove the mention from the string to get the actual name
+        name_to_set = re.sub(r'<@!?\d+>', '', user_input).strip()
 
     # 2. Quote Cleanup: "Name" -> Name
     if name_to_set.startswith('"') and name_to_set.endswith('"'):
@@ -238,13 +234,29 @@ async def setname(ctx, *, user_input: str):
 
 @bot.command()
 async def resetname(ctx, member: discord.Member = None):
-    """Resets custom VC name."""
+    """Resets custom VC name. Anyone can reset anyone's name."""
     target = ctx.author
-    if member and ctx.author.guild_permissions.administrator:
+    if member:
         target = member
 
     db_delete_user_name(target.id, ctx.guild.id)
     await ctx.send(f"✅ Reset custom name for **{target.display_name}**.")
+
+# --- LAZY LOADING HELPERS ---
+async def get_or_create_afk_channel(guild):
+    """Finds '💤 AFK' or creates it on demand."""
+    afk_c = discord.utils.get(guild.voice_channels, name=AFK_CHANNEL_NAME)
+    if not afk_c:
+        # If missing, we need to put it somewhere. Try to find the Main Lobby.
+        category = discord.utils.get(guild.categories, name=TARGET_CATEGORY_NAME)
+        if not category:
+            # If even the lobby is missing, create it.
+            category = await guild.create_category(TARGET_CATEGORY_NAME)
+
+        afk_c = await guild.create_voice_channel(AFK_CHANNEL_NAME, category=category)
+        try: await guild.edit(afk_channel=afk_c, afk_timeout=300)
+        except: pass # Ignore permission errors if we can't set server settings
+    return afk_c
 
 # --- CHAOS COMMANDS ---
 @bot.command()
@@ -268,8 +280,10 @@ async def bonk(ctx, member: discord.Member):
     try: await ctx.message.delete()
     except: pass
     if not member.voice: return await ctx.send("Target not in voice!", delete_after=5)
-    afk = ctx.guild.afk_channel
-    if not afk: return await ctx.send("No AFK channel!", delete_after=5)
+
+    # LAZY LOAD AFK
+    afk = await get_or_create_afk_channel(ctx.guild)
+
     original = member.voice.channel
     await ctx.send(f"🔨 **BONK!** {member.mention}")
     try:
@@ -284,7 +298,10 @@ async def ride(ctx, member: discord.Member):
     except: pass
     if not member.voice: return await ctx.send("Target not in voice!", delete_after=5)
     original = member.voice.channel
-    channels = [c for c in ctx.guild.voice_channels if c != original and c != ctx.guild.afk_channel]
+
+    # Filter out AFK by name so we don't dump them there
+    channels = [c for c in ctx.guild.voice_channels if c != original and c.name != AFK_CHANNEL_NAME]
+
     if len(channels) < 3: return await ctx.send("Not enough channels!", delete_after=5)
     await ctx.send(f"🎢 Buckle up {member.mention}!")
     for _ in range(3):
@@ -312,8 +329,10 @@ async def lag(ctx, member: discord.Member):
     try: await ctx.message.delete()
     except: pass
     if not member.voice: return await ctx.send("Target not in voice!", delete_after=5)
-    afk = ctx.guild.afk_channel
-    if not afk: return await ctx.send("No AFK channel!", delete_after=5)
+
+    # LAZY LOAD AFK
+    afk = await get_or_create_afk_channel(ctx.guild)
+
     original = member.voice.channel
     await ctx.send(f"📶 Creating artificial lag for {member.mention}...")
     for _ in range(3):
@@ -367,19 +386,22 @@ async def handle_loneliness(channel, member_count):
             await channel.edit(name=original_name)
 
 async def ensure_voice_setup(guild):
+    """
+    Ensures 'VOICE LOBBY' and 'Create Channel' trigger exist.
+    NO LONGER creates AFK automatically.
+    """
     try:
         category = discord.utils.get(guild.categories, name=TARGET_CATEGORY_NAME)
         if not category:
             category = await guild.create_category(TARGET_CATEGORY_NAME)
             print(f"🛠️  Created Default Category '{TARGET_CATEGORY_NAME}'")
+
         trigger = discord.utils.get(category.voice_channels, name=TRIGGER_CHANNEL_NAME)
         if not trigger:
             trigger = await guild.create_voice_channel(TRIGGER_CHANNEL_NAME, category=category)
-        afk_c = discord.utils.get(guild.voice_channels, name=AFK_CHANNEL_NAME)
-        if not afk_c:
-            afk_c = await guild.create_voice_channel(AFK_CHANNEL_NAME, category=category)
-            try: await guild.edit(afk_channel=afk_c, afk_timeout=300)
-            except: pass
+
+        # AFK creation removed from here!
+
     except Exception as e:
         print(f"Failed setup {guild.name}: {e}")
         await log_error(e, extra_info=f"Setup {guild.name}")
