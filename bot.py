@@ -1,4 +1,4 @@
-# ... existing imports ...
+# Concierge Voice Manager Bot
 import discord
 import os
 import asyncio
@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 TOKEN = os.getenv('DISCORD_TOKEN')
 MOD_CHANNEL_ID = os.getenv('MOD_CHANNEL_ID')
-DB_NAME = os.getenv('DB_PATH', 'trg.db')
+DB_NAME = os.getenv('DB_PATH', 'concierge.db')
 
 # --- CONSTANTS ---
 TARGET_CATEGORY_NAME = "🔊 VOICE LOBBY"
@@ -415,7 +415,7 @@ async def on_ready():
     init_db()
     print(f'Logged in as {bot.user}')
     for guild in bot.guilds: await ensure_voice_setup(guild)
-    print('--- TRG Manager Ready ---')
+    print('--- Concierge Ready ---')
 
 @bot.event
 async def on_voice_state_update(member, before, after):

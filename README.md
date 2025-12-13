@@ -1,23 +1,23 @@
-# TRG Voice Manager Bot
+# Concierge
 
-A feature-rich Discord bot for managing dynamic voice channels, creating private lobbies, and engaging users with fun commands.
+A professional Discord bot acts as a **Concierge** for your server—managing dynamic voice channels, creating private lobbies, and handling room service (with a few chaotic twists).
 
 ## Features
 
 ### 🎙️ Dynamic Voice Channels
-- **Auto-Creation**: Join "➕ Create Channel" to get your own voice channel.
+- **Auto-Creation**: Join "➕ Create Channel" to be assigned your own room.
 - **Smart Inheritance**: Channels created in a "Private Lobby" category automatically inherit private permissions.
 - **Forever Alone**: If you're alone for 60s, your channel renames to "Forever Alone" (and restores when someone joins).
-- **Auto-Cleanup**: Empty channels are deleted automatically.
+- **Auto-Cleanup**: Empty channels are swept away automatically.
 
-### 🎛️ Voice Controls (Buttons)
+### 🎛️ Room Service (Buttons)
 - **🔒 Lock**: Sets the user limit to the current number of members.
 - **🔓 Unlock**: Removes the user limit.
 - **👥 Role Limit**: Restrict your channel to a specific role (e.g., "Subscribers Only").
 - **✏️ Rename**: Instructions on how to rename your channel.
 
 ### 🛠️ User Customization
-- **`!setname <name>`**: Set a permanent custom name for your channels (e.g., `!setname Magdi's Cave`).
+- **`!setname <name>`**: Set a permanent custom name for your rooms (e.g., `!setname Magdi's Lounge`).
 - **`!resetname`**: Reset your channel name to default.
 
 ### 🎲 Fun & Chaos
@@ -31,8 +31,8 @@ A feature-rich Discord bot for managing dynamic voice channels, creating private
 
 ### 👑 Admin Commands
 - **`!create_lobby "<Name>" [@Role]`**: Create a new category and trigger channel.
-    - Example Public: `!create_lobby "Gaming Lounge"`
-    - Example Private: `!create_lobby "Admin Area" @Admin`
+    - Example Public: `!create_lobby "General Lounge"`
+    - Example Private: `!create_lobby "VIP Area" @VIP`
 
 ## Prerequisites
 
@@ -47,7 +47,7 @@ A feature-rich Discord bot for managing dynamic voice channels, creating private
 Create a `.env` file in the project root:
 ```bash
 DISCORD_TOKEN=your_token_here
-DB_PATH=/data/trg.db
+DB_PATH=/data/concierge.db
 MOD_CHANNEL_ID=123456789012345678  # Optional: ID for error logging
 ```
 
@@ -64,17 +64,17 @@ If you prefer not to use Compose:
 
 **Build the image:**
 ```bash
-docker build -t trg-bot .
+docker build -t concierge-bot .
 ```
 
 **Run the container:**
 ```bash
 docker run -d \
-  --name trg_bot \
+  --name concierge_bot \
   --restart always \
   --env-file .env \
-  -v $(pwd)/trg.db:/data/trg.db \
-  trg-bot
+  -v $(pwd)/concierge.db:/data/concierge.db \
+  concierge-bot
 ```
 
 ## Local Development
@@ -100,7 +100,7 @@ docker run -d \
 | Variable | Description | Default |
 | :--- | :--- | :--- |
 | `DISCORD_TOKEN` | **Required**. Your Discord Bot Token. | - |
-| `DB_PATH` | Path to the SQLite DB. | `trg.db` |
+| `DB_PATH` | Path to the SQLite DB. | `concierge.db` |
 | `MOD_CHANNEL_ID`| Channel ID to log bot errors. | `None` |
 
 ## Troubleshooting

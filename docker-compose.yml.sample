@@ -1,11 +1,12 @@
 services:
-  trg-bot:
-    image: ghcr.io/ahmed93/trg-vmb:latest
-    container_name: trg_bot
+  concierge:
+    image: concierge-bot:latest
+    container_name: concierge_bot
     restart: always
     environment:
-      - DB_PATH=/data/trg.db
+      - DB_PATH=/data/concierge.db
       - DISCORD_TOKEN=your_token_here
+      - MOD_CHANNEL_ID=your_moderator_channel_id
     volumes:
       - bot_data:/data
 
