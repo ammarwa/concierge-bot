@@ -7,34 +7,42 @@ on:
       - '**.md'
       - 'LICENSE'
       - '.gitignore'
-    # We remove the 'tags' trigger to avoid double-builds.
-    # This workflow now CREATES the tag for you.
 
 env:
-  REGISTRY: ghcr.io
+  REGISTRY_GHCR: ghcr.io
+  REGISTRY_DOCKER: docker.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # ⚠️ NEEDED: To push the new tag back to the repo
-      packages: write # NEEDED: To upload the docker image
+      contents: write # NEEDED: To create releases and push tags
+      packages: write # NEEDED: To upload to GHCR
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # ⚠️ NEEDED: Must fetch full history to calculate version
+          fetch-depth: 0
 
-      # --- AUTO VERSIONING STEP ---
+      # --- AUTO VERSIONING & RELEASE ---
       - name: Bump version and push tag
         id: tag_version
         uses: mathieudutour/github-tag-action@v6.2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          default_bump: patch # If no "feat" or "fix" in commit, just bump 0.0.1
-          tag_prefix: v     # Creates tags like v1.0.1
+          default_bump: patch
+          tag_prefix: v
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.tag_version.outputs.new_tag }}
+          name: Release ${{ steps.tag_version.outputs.new_tag }}
+          body: ${{ steps.tag_version.outputs.changelog }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # --- BUILD STEPS ---
       - name: Set up QEMU
@@ -43,12 +51,21 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to the Container registry
+      # Login to GHCR
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ${{ env.REGISTRY_GHCR }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Login to Docker Hub
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY_DOCKER }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -56,9 +73,10 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
-          # Use the output from the tagging step to tag the image
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag_version.outputs.new_tag }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME }}:${{ steps.tag_version.outputs.new_tag }}
+            ${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME }}:latest
+            ${{ secrets.DOCKER_USERNAME }}/concierge-bot:${{ steps.tag_version.outputs.new_tag }}
+            ${{ secrets.DOCKER_USERNAME }}/concierge-bot:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
