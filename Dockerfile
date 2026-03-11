@@ -19,8 +19,8 @@ RUN pipenv install --system --deploy
 # Copy the rest of the application
 COPY . .
 
-# Create a non-root user
-RUN useradd -m appuser
+# Create a non-root user and data directory
+RUN useradd -m appuser && mkdir -p /data && chown appuser:appuser /data
 
 # Switch to non-root user
 USER appuser

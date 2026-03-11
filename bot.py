@@ -26,6 +26,11 @@ LONELY_TIMEOUT = 60
 
 # --- DATABASE SETUP (ISOLATED PER GUILD) ---
 def init_db():
+    db_dir = os.path.dirname(os.path.abspath(DB_NAME))
+    try:
+        os.makedirs(db_dir, exist_ok=True)
+    except OSError as e:
+        raise RuntimeError(f"Cannot create database directory '{db_dir}': {e}") from e
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS active_channels
